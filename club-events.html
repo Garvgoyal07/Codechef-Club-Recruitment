@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Campus Clubs — Events</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--accent:#7c5cff;--accent2:#22d3ee;--text:#e8e9ee;--muted:#9aa0ae}
+  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#f7f7fb;--card:#ffffff;--text:#161821;--muted:#6b7080}}
+  :root[data-theme="dark"]{--bg:#0f1115;--card:#171a21;--text:#e8e9ee;--muted:#9aa0ae}
+  html,body{background:var(--bg);color:var(--text);height:100%;box-sizing:border-box;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0)}
+  .card{background:var(--card);border:1px solid rgba(127,127,127,.15)}
+  .muted{color:var(--muted)}
+  .btn{background:var(--accent);color:#fff}
+  .btn:hover{opacity:.9}
+  .chip{border:1px solid rgba(127,127,127,.3)}
+  ::-webkit-scrollbar{height:6px;width:6px}
+  .scrollx{overflow-x:auto}
+  input,select,textarea{background:transparent;border:1px solid rgba(127,127,127,.35);color:var(--text)}
+  .tab-active{background:var(--accent);color:#fff}
+</style>
+</head>
+<body class="font-sans">
+<div id="app" class="max-w-6xl mx-auto px-4 pb-16"></div>
+
+<script>
+const LS_EVENTS='ccu_events', LS_REGS='ccu_regs', LS_ADMIN='ccu_admin';
+const ADMIN_PASS='admin123';
+
+function seed(){
+  if(!localStorage.getItem(LS_EVENTS)){
+    const now=new Date();
+    const d=(off)=>{let x=new Date(now);x.setDate(x.getDate()+off);return x.toISOString().slice(0,16);};
+    const evts=[
+      {id:cid(),name:'Tech Innovate Hackathon',category:'Technical',date:d(5),venue:'Main Auditorium',desc:'24-hour hackathon for students to build and pitch innovative tech projects.',featured:true,img:'💻'},
+      {id:cid(),name:'Cultural Fiesta Night',category:'Cultural',date:d(9),venue:'Open Air Theatre',desc:'An evening of music, dance, and drama showcasing talent from every department.',featured:false,img:'🎭'},
+      {id:cid(),name:'Inter-College Basketball Cup',category:'Sports',date:d(12),venue:'Sports Complex',desc:'Annual basketball tournament with teams from nearby colleges competing for the trophy.',featured:false,img:'🏀'},
+      {id:cid(),name:'Entrepreneurship Bootcamp',category:'Workshop',date:d(3),venue:'Seminar Hall B',desc:'Hands-on workshop on building and pitching a startup idea with mentor feedback.',featured:false,img:'🚀'},
+      {id:cid(),name:'Photography Walk',category:'Club Activity',date:d(15),venue:'Campus Gardens',desc:'A relaxed outdoor session to explore photography basics and composition.',featured:false,img:'📷'}
+    ];
+    localStorage.setItem(LS_EVENTS,JSON.stringify(evts));
+  }
+  if(!localStorage.getItem(LS_REGS)) localStorage.setItem(LS_REGS,JSON.stringify([]));
+}
+function cid(){return Math.random().toString(36).slice(2,10);}
+function getEvents(){return JSON.parse(localStorage.getItem(LS_EVENTS)||'[]');}
+function setEvents(v){localStorage.setItem(LS_EVENTS,JSON.stringify(v));}
+function getRegs(){return JSON.parse(localStorage.getItem(LS_REGS)||'[]');}
+function setRegs(v){localStorage.setItem(LS_REGS,JSON.stringify(v));}
+function fmtDate(s){const d=new Date(s);return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})+' · '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});}
+
+let state={view:'home', search:'', category:'All', regEventId:null, admin:false, adminTab:'events', editingId:null};
+
+function render(){
+  const app=document.getElementById('app');
+  app.innerHTML = nav() + (
+    state.view==='home' ? homeView() :
+    state.view==='events' ? eventsView() :
+    adminView()
+  ) + (state.regEventId ? regModal() : '') + (state.editingId!==null ? editModal() : '');
+  attach();
+}
+
+function nav(){
+  const tabs=[['home','Home'],['events','Events'],['admin','Admin']];
+  return `<div class="flex items-center justify-between py-5">
+    <div class="text-xl font-bold">🎓 Campus<span style="color:var(--accent)">Clubs</span></div>
+    <div class="flex gap-1 card rounded-full p-1">
+      ${tabs.map(([k,l])=>`<button data-nav="${k}" class="px-4 py-1.5 rounded-full text-sm ${state.view===k?'tab-active':'muted'}">${l}</button>`).join('')}
+    </div>
+  </div>`;
+}
+
+function eventCard(e,i){
+  return `<div class="card rounded-xl p-4 flex flex-col gap-2">
+    <div class="text-4xl">${e.img||'📅'}</div>
+    <div class="font-semibold text-lg">${esc(e.name)}</div>
+    <span class="chip text-xs px-2 py-0.5 rounded-full w-fit muted">${esc(e.category)}</span>
+    <div class="text-sm muted">🕒 ${fmtDate(e.date)}</div>
+    <div class="text-sm muted">📍 ${esc(e.venue)}</div>
+    <p class="text-sm mt-1">${esc(e.desc)}</p>
+    <button data-reg="${e.id}" class="btn mt-2 rounded-lg py-2 text-sm font-medium">Register</button>
+  </div>`;
+}
+
+function homeView(){
+  const evts=getEvents();
+  const featured=evts.find(e=>e.featured)||evts[0];
+  const upcoming=[...evts].sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,3);
+  return `
+  <div class="rounded-2xl p-8 mb-8" style="background:linear-gradient(135deg,var(--accent),var(--accent2))">
+    <h1 class="text-3xl font-bold text-white mb-2">Welcome to Campus Clubs</h1>
+    <p class="text-white/90 max-w-xl">Discover events run by every student club on campus — tech, culture, sports and more. Find something, register in seconds, and show up.</p>
+    <button data-nav="events" class="mt-4 bg-white text-black rounded-lg px-5 py-2 font-medium">Browse Events</button>
+  </div>
+  ${featured?`<h2 class="text-lg font-semibold mb-3">⭐ Featured Event</h2>
+  <div class="mb-10">${eventCard(featured)}</div>`:''}
+  <h2 class="text-lg font-semibold mb-3">Upcoming Events</h2>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">${upcoming.map(eventCard).join('')||'<p class="muted">No events yet.</p>'}</div>`;
+}
+
+function eventsView(){
+  const cats=['All',...new Set(getEvents().map(e=>e.category))];
+  let evts=getEvents().filter(e=>e.name.toLowerCase().includes(state.search.toLowerCase()));
+  if(state.category!=='All') evts=evts.filter(e=>e.category===state.category);
+  evts.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  return `
+  <h1 class="text-2xl font-bold mb-4">All Events</h1>
+  <div class="flex flex-col sm:flex-row gap-3 mb-6">
+    <input id="searchInput" placeholder="Search events by name..." value="${esc(state.search)}" class="rounded-lg px-3 py-2 flex-1">
+    <select id="catSelect" class="rounded-lg px-3 py-2">
+      ${cats.map(c=>`<option ${c===state.category?'selected':''}>${esc(c)}</option>`).join('')}
+    </select>
+  </div>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">${evts.map(eventCard).join('')||'<p class="muted">No events match your search.</p>'}</div>`;
+}
+
+function regModal(){
+  const e=getEvents().find(x=>x.id===state.regEventId);
+  if(!e) return '';
+  return `<div class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" id="modalBg">
+    <div class="card rounded-xl p-6 w-full max-w-md">
+      <div class="flex justify-between items-start mb-1">
+        <h3 class="text-lg font-semibold">Register — ${esc(e.name)}</h3>
+        <button id="closeModal" class="muted text-xl leading-none">&times;</button>
+      </div>
+      <p class="text-sm muted mb-4">${fmtDate(e.date)} · ${esc(e.venue)}</p>
+      <form id="regForm" class="flex flex-col gap-3">
+        <input required name="name" placeholder="Full name" class="rounded-lg px-3 py-2">
+        <input required type="email" name="email" placeholder="Email" class="rounded-lg px-3 py-2">
+        <input required name="college" placeholder="College & Year (e.g. XYZ College, 2nd Year)" class="rounded-lg px-3 py-2">
+        <input required name="phone" placeholder="Phone number" class="rounded-lg px-3 py-2">
+        <button class="btn rounded-lg py-2 font-medium mt-2">Submit Registration</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+function adminView(){
+  if(!state.admin) return `
+  <div class="max-w-sm mx-auto card rounded-xl p-6 mt-10">
+    <h2 class="text-lg font-semibold mb-3">Admin Login</h2>
+    <form id="loginForm" class="flex flex-col gap-3">
+      <input required type="password" name="pass" placeholder="Password" class="rounded-lg px-3 py-2">
+      <button class="btn rounded-lg py-2 font-medium">Log in</button>
+    </form>
+    <p class="text-xs muted mt-2">Demo password: admin123</p>
+    <p id="loginErr" class="text-xs text-red-400 mt-1"></p>
+  </div>`;
+
+  const tabs=[['events','Manage Events'],['regs','Registrations']];
+  return `<div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold">Admin Dashboard</h1>
+    <button id="logoutBtn" class="chip rounded-lg px-3 py-1.5 text-sm">Log out</button>
+  </div>
+  <div class="flex gap-2 mb-6">${tabs.map(([k,l])=>`<button data-atab="${k}" class="px-4 py-1.5 rounded-full text-sm ${state.adminTab===k?'tab-active':'chip muted'}">${l}</button>`).join('')}</div>
+  ${state.adminTab==='events'?adminEvents():adminRegs()}`;
+}
+
+function adminEvents(){
+  const evts=getEvents();
+  return `
+  <button id="addEventBtn" class="btn rounded-lg px-4 py-2 mb-5 text-sm font-medium">+ Add Event</button>
+  <div class="scrollx">
+  <table class="w-full text-sm card rounded-xl overflow-hidden">
+    <thead class="text-left muted border-b border-white/10"><tr>
+      <th class="p-3">Name</th><th class="p-3">Category</th><th class="p-3">Date</th><th class="p-3">Venue</th><th class="p-3">Regs</th><th class="p-3"></th>
+    </tr></thead>
+    <tbody>
+    ${evts.map(e=>`<tr class="border-b border-white/5">
+      <td class="p-3">${esc(e.name)}</td><td class="p-3">${esc(e.category)}</td>
+      <td class="p-3">${fmtDate(e.date)}</td><td class="p-3">${esc(e.venue)}</td>
+      <td class="p-3">${getRegs().filter(r=>r.eventId===e.id).length}</td>
+      <td class="p-3 flex gap-2"><button data-edit="${e.id}" class="chip rounded px-2 py-1">Edit</button>
+      <button data-del="${e.id}" class="chip rounded px-2 py-1 text-red-400">Delete</button></td>
+    </tr>`).join('') || `<tr><td class="p-3 muted" colspan="6">No events.</td></tr>`}
+    </tbody>
+  </table></div>`;
+}
+
+function adminRegs(){
+  const events=getEvents();
+  let regs=getRegs();
+  if(state.regSearch) regs=regs.filter(r=>r.name.toLowerCase().includes(state.regSearch.toLowerCase())||r.email.toLowerCase().includes(state.regSearch.toLowerCase()));
+  if(state.regFilterEvent && state.regFilterEvent!=='All') regs=regs.filter(r=>r.eventId===state.regFilterEvent);
+  return `
+  <div class="flex flex-col sm:flex-row gap-3 mb-5">
+    <input id="regSearchInput" placeholder="Search by name or email..." value="${esc(state.regSearch||'')}" class="rounded-lg px-3 py-2 flex-1">
+    <select id="regFilterSelect" class="rounded-lg px-3 py-2">
+      <option ${!state.regFilterEvent||state.regFilterEvent==='All'?'selected':''}>All</option>
+      ${events.map(e=>`<option value="${e.id}" ${state.regFilterEvent===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+    </select>
+  </div>
+  <div class="scrollx">
+  <table class="w-full text-sm card rounded-xl overflow-hidden">
+    <thead class="text-left muted border-b border-white/10"><tr>
+      <th class="p-3">Name</th><th class="p-3">Email</th><th class="p-3">College/Year</th><th class="p-3">Phone</th><th class="p-3">Event</th>
+    </tr></thead>
+    <tbody>
+    ${regs.map(r=>`<tr class="border-b border-white/5">
+      <td class="p-3">${esc(r.name)}</td><td class="p-3">${esc(r.email)}</td>
+      <td class="p-3">${esc(r.college)}</td><td class="p-3">${esc(r.phone)}</td>
+      <td class="p-3">${esc((events.find(e=>e.id===r.eventId)||{}).name||'—')}</td>
+    </tr>`).join('') || `<tr><td class="p-3 muted" colspan="5">No registrations found.</td></tr>`}
+    </tbody>
+  </table></div>`;
+}
+
+function editModal(){
+  const isNew=state.editingId==='new';
+  const e=isNew?{name:'',category:'',date:'',venue:'',desc:'',img:'📅'}:getEvents().find(x=>x.id===state.editingId);
+  return `<div class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" id="editBg">
+    <div class="card rounded-xl p-6 w-full max-w-md">
+      <div class="flex justify-between items-start mb-4">
+        <h3 class="text-lg font-semibold">${isNew?'Add Event':'Edit Event'}</h3>
+        <button id="closeEdit" class="muted text-xl leading-none">&times;</button>
+      </div>
+      <form id="eventForm" class="flex flex-col gap-3">
+        <input required name="name" placeholder="Event name" value="${esc(e.name)}" class="rounded-lg px-3 py-2">
+        <input required name="category" placeholder="Category (e.g. Technical, Cultural)" value="${esc(e.category)}" class="rounded-lg px-3 py-2">
+        <input required type="datetime-local" name="date" value="${e.date||''}" class="rounded-lg px-3 py-2">
+        <input required name="venue" placeholder="Venue" value="${esc(e.venue)}" class="rounded-lg px-3 py-2">
+        <textarea required name="desc" placeholder="Description" class="rounded-lg px-3 py-2">${esc(e.desc)}</textarea>
+        <label class="flex items-center gap-2 text-sm muted"><input type="checkbox" name="featured" ${e.featured?'checked':''}> Mark as featured</label>
+        <button class="btn rounded-lg py-2 font-medium mt-2">${isNew?'Add Event':'Save Changes'}</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+function esc(s){return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function attach(){
+  document.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>{state.view=b.dataset.nav;render();});
+  document.querySelectorAll('[data-reg]').forEach(b=>b.onclick=()=>{state.regEventId=b.dataset.reg;render();});
+  const modalBg=document.getElementById('modalBg');
+  if(modalBg) modalBg.onclick=(ev)=>{if(ev.target.id==='modalBg'||ev.target.id==='closeModal'){state.regEventId=null;render();}};
+  const regForm=document.getElementById('regForm');
+  if(regForm) regForm.onsubmit=(ev)=>{ev.preventDefault();
+    const fd=new FormData(regForm);
+    const regs=getRegs();
+    regs.push({id:cid(),eventId:state.regEventId,name:fd.get('name'),email:fd.get('email'),college:fd.get('college'),phone:fd.get('phone')});
+    setRegs(regs);
+    state.regEventId=null;
+    alert('Registration submitted! See you there.');
+    render();
+  };
+  const searchInput=document.getElementById('searchInput');
+  if(searchInput){searchInput.oninput=()=>{state.search=searchInput.value;render();setTimeout(()=>{const i=document.getElementById('searchInput');if(i){i.focus();i.selectionStart=i.selectionEnd=i.value.length;}},0);};}
+  const catSelect=document.getElementById('catSelect');
+  if(catSelect) catSelect.onchange=()=>{state.category=catSelect.value;render();};
+
+  const loginForm=document.getElementById('loginForm');
+  if(loginForm) loginForm.onsubmit=(ev)=>{ev.preventDefault();
+    const p=new FormData(loginForm).get('pass');
+    if(p===ADMIN_PASS){state.admin=true;render();}
+    else document.getElementById('loginErr').textContent='Incorrect password.';
+  };
+  const logoutBtn=document.getElementById('logoutBtn');
+  if(logoutBtn) logoutBtn.onclick=()=>{state.admin=false;render();};
+  document.querySelectorAll('[data-atab]').forEach(b=>b.onclick=()=>{state.adminTab=b.dataset.atab;render();});
+
+  const addEventBtn=document.getElementById('addEventBtn');
+  if(addEventBtn) addEventBtn.onclick=()=>{state.editingId='new';render();};
+  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{state.editingId=b.dataset.edit;render();});
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+    if(confirm('Delete this event? Its registrations will remain on record.')){
+      setEvents(getEvents().filter(e=>e.id!==b.dataset.del));render();
+    }
+  });
+  const editBg=document.getElementById('editBg');
+  if(editBg) editBg.onclick=(ev)=>{if(ev.target.id==='editBg'||ev.target.id==='closeEdit'){state.editingId=null;render();}};
+  const eventForm=document.getElementById('eventForm');
+  if(eventForm) eventForm.onsubmit=(ev)=>{ev.preventDefault();
+    const fd=new FormData(eventForm);
+    const data={name:fd.get('name'),category:fd.get('category'),date:fd.get('date'),venue:fd.get('venue'),desc:fd.get('desc'),featured:fd.get('featured')==='on',img:'📅'};
+    let evts=getEvents();
+    if(state.editingId==='new'){ data.id=cid(); evts.push(data); }
+    else { evts=evts.map(e=>e.id===state.editingId?{...e,...data}:e); }
+    setEvents(evts);
+    state.editingId=null;
+    render();
+  };
+  const regSearchInput=document.getElementById('regSearchInput');
+  if(regSearchInput){regSearchInput.oninput=()=>{state.regSearch=regSearchInput.value;render();setTimeout(()=>{const i=document.getElementById('regSearchInput');if(i){i.focus();i.selectionStart=i.selectionEnd=i.value.length;}},0);};}
+  const regFilterSelect=document.getElementById('regFilterSelect');
+  if(regFilterSelect) regFilterSelect.onchange=()=>{state.regFilterEvent=regFilterSelect.value;render();};
+}
+
+seed();
+render();
+</script>
+</body>
+</html>
